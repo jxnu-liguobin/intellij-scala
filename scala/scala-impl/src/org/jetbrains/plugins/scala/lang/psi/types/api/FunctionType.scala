@@ -26,10 +26,14 @@ sealed trait FunctionTypeFactory[D <: ScTypeDefinition, T] {
     }
 
   protected final def apply(parameters: Seq[ScType], suffix: String)
-                           (implicit scope: ElementScope, tag: ClassTag[D]): ValueType =
-    scope.getCachedClass(TypeName + suffix).collect {
-      case definition: D => ScParameterizedType(ScalaType.designator(definition), parameters)
-    }.getOrElse(api.Nothing)
+                           (implicit scope: ElementScope, tag: ClassTag[D]): ValueType = {
+    val cached = scope.getCachedClass(TypeName + suffix)
+    val result = cached.collect {
+      case definition: D =>
+        ScParameterizedType(ScalaType.designator(definition), parameters)
+    }
+    result.getOrElse(api.Nothing)
+  }
 
   protected def unapplyCollector: PartialFunction[Seq[ScType], T]
 }

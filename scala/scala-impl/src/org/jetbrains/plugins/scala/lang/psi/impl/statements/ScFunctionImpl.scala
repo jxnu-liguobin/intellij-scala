@@ -345,20 +345,22 @@ abstract class ScFunctionImpl[F <: ScFunction](stub: ScFunctionStub[F],
 
   override def `type`(): TypeResult = {
     this.returnType match {
-      case Right(tp) =>
-        var res: TypeResult = Right(tp)
+      case res0@Right(rt) =>
+        var res: TypeResult = res0
+
         val paramClauses = effectiveParameterClauses
-        var i = paramClauses.length - 1
-        while (i >= 0) {
+        var parameterClauseIdx = paramClauses.length - 1
+        while (parameterClauseIdx >= 0) {
           res match {
             case Right(t) =>
-              val parameters = paramClauses.apply(i).effectiveParameters
+              val parameters = paramClauses.apply(parameterClauseIdx).effectiveParameters
               val paramTypes = parameters.map(_.`type`().getOrNothing)
               res = Right(FunctionType(t, paramTypes))
             case _ =>
           }
-          i = i - 1
+          parameterClauseIdx = parameterClauseIdx - 1
         }
+
         res
       case x => x
     }

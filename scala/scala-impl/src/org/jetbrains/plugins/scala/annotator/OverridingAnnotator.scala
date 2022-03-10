@@ -4,6 +4,7 @@ package annotator
 import com.intellij.psi._
 import org.jetbrains.plugins.scala.annotator.quickfix.PullUpQuickFix
 import org.jetbrains.plugins.scala.extensions._
+import org.jetbrains.plugins.scala.lang.psi.ElementScope
 import org.jetbrains.plugins.scala.lang.psi.api.PropertyMethods
 import org.jetbrains.plugins.scala.lang.psi.api.base.ScFieldId
 import org.jetbrains.plugins.scala.lang.psi.api.base.patterns.ScBindingPattern
@@ -357,6 +358,7 @@ trait OverridingAnnotator {
       implicit val tpc: TypePresentationContext = TypePresentationContext(memberNameId)
 
       if (!isMismatchedExtension) {
+        implicit val scope: ElementScope = ElementScope(namedElement)
         for {
           overridingType <- typeForSigElement(namedElement)
           superSig       <- superSignatures.filterByType[TermSignature]
@@ -378,10 +380,15 @@ trait OverridingAnnotator {
 }
 
 object OverridingAnnotator {
-  def typeForSigElement(named: PsiNamedElement): Option[ScType] =
+  def typeForSigElement(named: PsiNamedElement)(implicit scope: ElementScope): Option[ScType] =
     named match {
       case cp: ScClassParameter => cp.getRealParameterType.toOption
       case t: Typeable          => t.`type`().toOption
-      case _                    => None
+      case psiMethod: PsiMethod =>
+        //when extending Java/Kotlin class
+        import org.jetbrains.plugins.scala.extensions.PsiMethodExt
+        val ft = psiMethod.functionType(scope)
+        ft
+      case _ => None
     }
 }

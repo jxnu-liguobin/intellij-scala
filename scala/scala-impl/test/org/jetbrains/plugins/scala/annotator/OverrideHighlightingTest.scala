@@ -96,18 +96,23 @@ class OverrideHighlightingTest extends ScalaHighlightingTestBase {
     assertNothing(errorsFromScalaCode(code))
   }
 
-  private def addType(over: String): String = {
-    val split = over.split("=")
-    split(0) + ": Int =" + split(1)
+  private def addIntType(over: String): String = {
+    addType(over, "Int")
   }
 
-  private def inheritWithStringToIntConversion(base: String, over: String) =
+  //noinspection SameParameterValue
+  private def addType(definitionWithoutType: String, typ: String): String = {
+    val Array(lhs, rhs) = definitionWithoutType.split("=")
+    s"$lhs: $typ =$rhs"
+  }
+
+  private def inheritWithStringToIntConversion(baseDefinition: String, overrideDefinition: String) =
     s"""
         |class Test {
         |  implicit def s2i(s: String): Int = s.length
-        |  trait Base { $base }
-        |  trait Sub extends Base { $over }
-        |  trait Sub2 extends Base { ${addType(over)} }
+        |  trait Base { $baseDefinition }
+        |  trait Sub extends Base { $overrideDefinition }
+        |  trait Sub2 extends Base { ${addIntType(overrideDefinition)} }
         |}
       """.stripMargin
 
@@ -270,5 +275,108 @@ class OverrideHighlightingTest extends ScalaHighlightingTestBase {
       Error("C4", "Class 'C4' must either be declared abstract or implement abstract member 'setValue(foo: String): Unit' in 'Setter'"),
       Error("value", "Overriding type Int does not conform to base type String"),
     ): _*)
+  }
+
+  def testOverridingTypeDoesNotConformToBaseType_ExtendingScalaClass(): Unit = {
+    val code =
+      s"""class BaseScala {
+         |  protected def fooProtected: String = null
+         |  def foo1: String = ???
+         |  def foo2(): String = ???
+         |  def foo3(x: Int): String = ???
+         |  def foo4(x: Int, y: String): String = ???
+         |}
+         |
+         |abstract class B extends BaseScala {
+         |  override protected def fooProtected: Int = ???
+         |  override def foo1: Int = ???
+         |  override def foo2(): Int = ???
+         |  override def foo3(x: Int): Int = ???
+         |  override def foo4(x: Int, y: String): Int = ???
+         |}
+         |""".stripMargin
+
+    assertErrorsText(code,
+      """Error(fooProtected,Overriding type Int does not conform to base type String)
+        |Error(foo1,Overriding type Int does not conform to base type String)
+        |Error(foo2,Overriding type () => Int does not conform to base type () => String)
+        |Error(foo3,Overriding type Int => Int does not conform to base type Int => String)
+        |Error(foo4,Overriding type (Int, String) => Int does not conform to base type (Int, String) => String)
+        |""".stripMargin)
+  }
+
+  //SCL-20010
+  def testOverridingTypeDoesNotConformToBaseType_ExtendingJavaClass(): Unit = {
+    getFixture.addFileToProject("BaseJava.java",
+      """public class BaseJava {
+        |    protected String fooProtected() { return null; }
+        |    public String fooPublic1() { return null; }
+        |    public String fooPublic2(int x) { return null; }
+        |    public String fooPublic3(int x, String y) { return null; }
+        |}
+        |""".stripMargin
+    )
+
+    val code =
+      s"""class A extends BaseJava {
+         |  override protected def fooProtected: Int = ???
+         |  override def fooPublic1(): Int = ???
+         |  override def fooPublic2(x: Int): Int = ???
+         |  override def fooPublic3(x: Int, y: String): Int = ???
+         |}
+         |""".stripMargin
+
+    assertErrorsText(code,
+      """Error(fooProtected,Overriding type Int does not conform to base type () => String)
+        |Error(fooPublic1,Overriding type () => Int does not conform to base type () => String)
+        |Error(fooPublic2,Overriding type Int => Int does not conform to base type Int => String)
+        |Error(fooPublic3,Overriding type (Int, String) => Int does not conform to base type (Int, String) => String)
+        |""".stripMargin)
+  }
+
+  def testOverridingTypeDoesNotConformToBaseType_ExtendingJavaClass_FromJdk(): Unit = {
+    val code =
+      s"""class MyComparator extends java.util.Comparator[String] {
+         |  override def compare(o1: String, o2: String): AnyRef = ???
+         |}
+         |""".stripMargin
+
+    assertErrorsText(code,
+      """Error(compare,Overriding type (String, String) => AnyRef does not conform to base type (T, T) => Int)
+        |""".stripMargin)
+  }
+
+
+  def testOverridingTypeConformsToBaseType_ExtendingJavaClass(): Unit = {
+    getFixture.addFileToProject("BaseJava.java",
+      """public class BaseJava {
+        |    protected String fooProtected() { return null; }
+        |    public String fooPublic1() { return null; }
+        |    public String fooPublic2(int x) { return null; }
+        |    public String fooPublic3(int x, String y) { return null; }
+        |}
+        |""".stripMargin
+    )
+
+    val code =
+      s"""class A extends BaseJava {
+         |  override protected def fooProtected: String = ???
+         |  override def fooPublic1: String = ???
+         |  override def fooPublic2(x: Int): String = ???
+         |  override def fooPublic3(x: Int, y: String): String = ???
+         |}
+         |""".stripMargin
+
+    assertNoErrors(code)
+  }
+
+
+  def testOverridingTypeConformsToBaseType_ExtendingJavaClass_FromJdk(): Unit = {
+    val code =
+      s"""class MyComparator extends java.util.Comparator[String] {
+         |  override def compare(o1: String, o2: String): Int = ???
+         |}
+         |""".stripMargin
+    assertNoErrors(code)
   }
 }
