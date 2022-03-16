@@ -6,10 +6,9 @@ import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.deadCode.UnusedDeclarationInspectionBase
 import com.intellij.psi._
 import com.intellij.psi.search.searches.ReferencesSearch
-import com.intellij.psi.search.{LocalSearchScope, PsiSearchHelper, SearchScope, TextOccurenceProcessor, UsageSearchContext}
+import com.intellij.psi.search._
 import org.jetbrains.annotations.Nls
 import org.jetbrains.plugins.scala.annotator.usageTracker.ScalaRefCountHolder
-import org.jetbrains.plugins.scala.codeInspection.unusedInspections.ScalaUnusedSymbolInspection._
 import org.jetbrains.plugins.scala.extensions._
 import org.jetbrains.plugins.scala.lang.lexer.ScalaModifier
 import org.jetbrains.plugins.scala.lang.psi.ScalaPsiUtil
@@ -24,7 +23,9 @@ import org.jetbrains.plugins.scala.util.{ScalaMainMethodUtil, ScalaUsageNamesUti
 
 import scala.jdk.CollectionConverters._
 
-class ScalaUnusedSymbolInspection extends HighlightingPassInspection {
+abstract class ScalaUnusedSymbolInspectionBase extends HighlightingPassInspection {
+  import ScalaUnusedSymbolInspectionBase._
+
   override def isEnabledByDefault: Boolean = true
 
   override def getDisplayName: String = ScalaInspectionBundle.message("display.name.unused.symbol")
@@ -35,12 +36,12 @@ class ScalaUnusedSymbolInspection extends HighlightingPassInspection {
         localSearch(element)
       } else if (referencesSearch(element, new LocalSearchScope(element.getContainingFile))) {
         true
+      } else if (!isReportPublicSymbols) {
+        true
+      } else if (checkIfEnumUsedOutsideScala(element)) {
+        true
       } else {
-        if (checkIfEnumUsedOutsideScala(element)) {
-          true
-        } else {
-          textSearch(element)
-        }
+        textSearch(element)
       }
     } else {
       //need to look for references because file is not highlighted
@@ -162,7 +163,7 @@ class ScalaUnusedSymbolInspection extends HighlightingPassInspection {
       case inNameContext(holder: PsiAnnotationOwner) if hasUnusedAnnotation(holder) => Seq.empty
       case named: ScNamedElement =>
         if (!isElementUsed(named, isOnTheFly)) {
-          Seq(ProblemInfo(named.nameId, ScalaUnusedSymbolInspection.annotationDescription, ProblemHighlightType.LIKE_UNUSED_SYMBOL, DeleteUnusedElementFix.quickfixesFor(named)))
+          Seq(ProblemInfo(named.nameId, ScalaUnusedSymbolInspectionBase.annotationDescription, ProblemHighlightType.LIKE_UNUSED_SYMBOL, DeleteUnusedElementFix.quickfixesFor(named)))
         } else Seq.empty
       case _ => Seq.empty
     }
@@ -192,9 +193,11 @@ class ScalaUnusedSymbolInspection extends HighlightingPassInspection {
       case _ => false
     }
   }
+
+  def isReportPublicSymbols: Boolean
 }
 
-object ScalaUnusedSymbolInspection {
+object ScalaUnusedSymbolInspectionBase {
   @Nls
   val annotationDescription: String = ScalaInspectionBundle.message("declaration.is.never.used")
 
